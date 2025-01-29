@@ -119,7 +119,7 @@ def main():
 
     st.set_page_config(
         page_title="Just Ask",
-        page_icon="https://www.statestreet.com/web/Homepage/images/state-street-logo-final.svg",
+        page_icon="🤖",
         layout="centered",
         initial_sidebar_state="collapsed",
     )
@@ -130,27 +130,6 @@ def main():
     if not check_password():
         return
 
-
- # Create a sticky header container
- # Create a sticky header container
-    # header_container = st.container()
-    # with header_container:
-    #     st.markdown('''
-    #         <div class="sticky-header">
-    #             <div class="header-content">
-    #                 <h1 class="main-title">Just Ask</h1>
-    #                 <p class="intro-text">Welcome! I'm your AI assistant. Feel free to ask me any questions about coding, 
-    #                 development, or technical topics. I'm here to help make your development journey easier.</p>
-    #             </div>
-    #         </div>
-    #     ''', unsafe_allow_html=True)
-
-    # # Add some space after the header
-    # st.markdown("<div class='header-spacer'></div>", unsafe_allow_html=True)
-
-
-    # Inject custom CSS
-    # st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
     
     # Custom title with SS branding
     # st.markdown('<h1 class="main-title" style="position: sticky; top: 0; background-color: white; z-index: 999;">Just Ask</h1>', unsafe_allow_html=True)
