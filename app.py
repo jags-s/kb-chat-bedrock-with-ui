@@ -10,8 +10,8 @@ USERNAME = os.getenv("CHATBOT_USERNAME")
 PASSWORD = os.getenv("CHATBOT_PASSWORD")
 API_URL = os.getenv("API_URL")
 MAX_REFERENCES = int(os.getenv("MAX_REFERENCES"))
-# State Street brand colors
-STATE_STREET_COLORS = {
+# SS brand colors
+SS_COLORS = {
     "primary_blue": "#007AC0",
     "secondary_blue": "#00508C",
     "dark_blue": "#002A5C",
@@ -152,7 +152,7 @@ def main():
     # Inject custom CSS
     # st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
     
-    # Custom title with State Street branding
+    # Custom title with SS branding
     # st.markdown('<h1 class="main-title" style="position: sticky; top: 0; background-color: white; z-index: 999;">Just Ask</h1>', unsafe_allow_html=True)
     st.markdown('<h2 class="main-title" style="position: sticky; top: 0; background-color: #001aff; color: white; z-index: 999;text-align: center;"> ✨ Just Ask</h2>', unsafe_allow_html=True)
     st.markdown('<h5 class="sub-title" style="text-align: center;">SS Employee Concierge</h5>', unsafe_allow_html=True)
