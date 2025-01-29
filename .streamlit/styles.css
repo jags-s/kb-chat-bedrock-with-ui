@@ -1,0 +1,80 @@
+/* Main app styling */
+.stApp {
+    background-color: white;
+}
+
+/* Title styling */
+.stMarkdown h1, h5 {
+    color: #001aff !important;
+}
+
+/* Regular text styling */
+.stMarkdown p {
+    color: #333333 !important;
+}
+
+/* Chat message styling */
+.user-message {
+    background-color: #F5F5F5;
+    padding: 1rem;
+    border-radius: 10px;
+    margin: 0.5rem 0;
+    border-left: 4px solid #007AC0;
+}
+
+.assistant-message {
+    background-color: #E6F3FA;
+    padding: 1rem;
+    border-radius: 10px;
+    margin: 0.5rem 0;
+    border-left: 4px solid #002A5C;
+}
+
+/* Login form styling */
+.login-container {
+    max-width: 400px;
+    margin: 2rem auto;
+    padding: 2rem;
+    background-color: #F5F5F5;
+    border-radius: 10px;
+    border-left: 4px solid #007AC0;
+}
+
+.login-title {
+    color: #002A5C;
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+/* Override Streamlit's default chat message styling */
+.stChatMessage {
+    background-color: transparent !important;
+    border: none !important;
+}
+
+.stChatMessageContent {
+    background-color: transparent !important;
+}
+
+/* Hide default chat avatars */
+.stChatMessageAvatar {
+    display: none !important;
+}
+
+/* References styling */
+.references {
+    margin-top: 0.5rem;
+    font-size: 0.9em;
+    color: #00508C;
+}
+
+.references a {
+    color: #007AC0;
+    text-decoration: none;
+}
+
+.references a:hover {
+    text-decoration: underline;
+}
+
+
