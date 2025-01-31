@@ -91,8 +91,42 @@ def call_api(query):
         return response.json()
         
     except requests.exceptions.ConnectionError as e:
-        print(f"Connection Error: {str(e)}")
-        print(f"Unable to connect to {api_url}")
+        print(f"Connection Error Details:")
+        print(f"Error Type: {type(e).__name__}")
+        print(f"Error Message: {str(e)}")
+        print(f"API URL: {api_url}")
+        
+        # Diagnose network connectivity
+        try:
+            import socket
+            from urllib.parse import urlparse
+            
+            parsed_url = urlparse(api_url)
+            hostname = parsed_url.hostname
+            
+            print(f"\nDiagnostic Information:")
+            print(f"Attempting to resolve hostname: {hostname}")
+            try:
+                ip = socket.gethostbyname(hostname)
+                print(f"IP Address: {ip}")
+            except socket.gaierror as dns_error:
+                print(f"DNS resolution failed: {str(dns_error)}")
+            
+            # Test port connectivity
+            port = 443 if parsed_url.scheme == 'https' else 80
+            print(f"Testing connection to {hostname}:{port}")
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(5)
+            result = sock.connect_ex((hostname, port))
+            if result == 0:
+                print(f"Port {port} is open")
+            else:
+                print(f"Port {port} is closed (error code: {result})")
+            sock.close()
+            
+        except Exception as diagnostic_error:
+            print(f"Diagnostic error: {str(diagnostic_error)}")
+        
         return None
         
     except requests.exceptions.Timeout as e:
