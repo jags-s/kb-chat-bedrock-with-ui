@@ -1,0 +1,4 @@
+# Using curl with verbose output
+curl -v -X POST "https://kfvngqj2ok.execute-api.us-east-1.amazonaws.com/dev/bedrokChatApiRes" \
+-H "Content-Type: application/json" \
+-d '{"user_query": "leave policy"}'
