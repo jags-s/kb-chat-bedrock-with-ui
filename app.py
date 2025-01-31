@@ -11,13 +11,13 @@ PASSWORD = os.getenv("CHATBOT_PASSWORD")
 API_URL = os.getenv("API_URL")
 MAX_REFERENCES = int(os.getenv("MAX_REFERENCES"))
 # SS brand colors
-SS_COLORS = {
-    "primary_blue": "#007AC0",
-    "secondary_blue": "#00508C",
-    "dark_blue": "#002A5C",
-    "light_gray": "#F5F5F5",
-    "text_gray": "#4A4A4A"
-}
+# SS_COLORS = {
+#     "primary_blue": "#007AC0",
+#     "secondary_blue": "#00508C",
+#     "dark_blue": "#002A5C",
+#     "light_gray": "#F5F5F5",
+#     "text_gray": "#4A4A4A"
+# }
 
 # Custom CSS for styling
 def load_custom_css():
@@ -71,19 +71,75 @@ def check_password():
         return True
 
 # Function to call the API
+
 def call_api(query):
     api_url = API_URL
-    
+    headers = {"Content-Type": "application/json"}
     try:
-        response = requests.post(api_url, json={"user_query": query})
+        print(f"Attempting to call API at: {api_url}")
+        print(f"Headers: {headers}")
+        print(f"Request body: {{'user_query': query}}")
+        
+        response = requests.post(
+            url=api_url,
+            headers=headers,
+            json={"user_query": query},
+            timeout=30  # Add timeout
+        )
+        
         response.raise_for_status()
         return response.json()
+        
+    except requests.exceptions.ConnectionError as e:
+        print(f"Connection Error: {str(e)}")
+        print(f"Unable to connect to {api_url}")
+        return None
+        
+    except requests.exceptions.Timeout as e:
+        print(f"Timeout Error: {str(e)}")
+        print(f"Request timed out after 30 seconds")
+        return None
+        
     except requests.exceptions.RequestException as e:
-        st.error(f"An error occurred while calling the API: {str(e)}")
+        print(f"Request Exception Details:")
+        print(f"Error Type: {type(e).__name__}")
+        print(f"Error Message: {str(e)}")
+        print(f"Request URL: {e.request.url if e.request else 'N/A'}")
+        print(f"Request Headers: {e.request.headers if e.request else 'N/A'}")
+        print(f"Request Body: {e.request.body if e.request else 'N/A'}")
+        if hasattr(e.response, 'status_code'):
+            print(f"Response Status: {e.response.status_code}")
+            print(f"Response Body: {e.response.text}")
         return None
-    except json.JSONDecodeError as e:
-        st.error(f"Error decoding JSON response: {str(e)}")
-        return None
+
+# def call_api(query):
+#     api_url = API_URL
+#     headers = {"Content-Type": "application/json"}
+#     try:
+#         response = requests.post(url=api_url, headers=headers, json={"user_query": query})
+
+#         print("response.status_code", response.status_code)
+#         if response.status_code == 400:
+#             print("Bad Request - Check payload format")
+#             print(f"Response: {response.text}")
+#         elif response.status_code == 401:
+#             print("Unauthorized - Check authentication")
+#             print(f"Headers sent: {response.request.headers}")
+#         elif response.status_code == 403:
+#             print("Forbidden - Check permissions")
+#         elif response.status_code == 404:
+#             print(f"Not Found - Check URL: {API_URL}")
+#         elif response.status_code == 429:
+#             print("Rate limit exceeded")
+        
+#         response.raise_for_status()
+#         return response.json()
+#     except requests.exceptions.RequestException as e:
+#         st.error(f"An error occurred while calling the API: {str(e)}")
+#         return None
+#     except json.JSONDecodeError as e:
+#         st.error(f"Error decoding JSON response: {str(e)}")
+#         return None
 
 # Function to format S3 location as a clickable link
 def format_references(s3_location):
