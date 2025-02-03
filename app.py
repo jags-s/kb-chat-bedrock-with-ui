@@ -148,7 +148,7 @@ def main():
         return
 
     st.markdown('<h2 class="main-title" style="position: sticky; top: 0; background-color: #001aff; color: white; z-index: 999;text-align: center;">Just Ask</h2>', unsafe_allow_html=True)
-    st.markdown('<h5 class="sub-title" style="text-align: center;">SS Employee Concierge</h5>', unsafe_allow_html=True)
+    st.markdown('<h5 class="sub-title" style="text-align: center; color: #001aff;">SS Employee Concierge</h5>', unsafe_allow_html=True)
 
     # Initialize session state variables
     if "messages" not in st.session_state:

@@ -4,23 +4,8 @@
 header {visibility: hidden;}                   /* Header with deployment button */
 
 /* Title styling */
-.stMarkdown h1, h5 {
+.stMarkdown h1 {
     color: #001aff !important;
-}
-
-/* Main app styling */
-.stApp {
-    background-color: white;
-}
-
-/* Title styling */
-.stMarkdown h1, h5 {
-    color: #001aff !important;
-}
-
-/* Regular text styling */
-.stMarkdown p {
-    color: #333333 !important;
 }
 
 /* Chat message styling */
