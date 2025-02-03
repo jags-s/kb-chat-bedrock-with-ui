@@ -1,22 +1,53 @@
-# 1. Import libraries
 import os
 import json
 import boto3
+from datetime import datetime, timedelta
+from urllib.parse import urlparse
 
-# 2. Knowledge base - Foundation Model & Client SetUp
+# Initialize AWS clients
 service_name = 'bedrock-agent-runtime'
 client = boto3.client(service_name)
+s3_client = boto3.client('s3')
 
 knowledgeBaseID = os.environ['KNOWLEDGE_BASE_ID']
 fundation_model_ARN = os.environ['FM_ARN']
 
+def generate_presigned_url(bucket, key, expiration=3600):
+    """Generate a presigned URL for an S3 object"""
+    try:
+        url = s3_client.generate_presigned_url(
+            'get_object',
+            Params={
+                'Bucket': bucket,
+                'Key': key,
+                'ResponseContentDisposition': 'inline'
+            },
+            ExpiresIn=expiration
+        )
+        return url
+    except Exception as e:
+        print(f"Error generating presigned URL: {str(e)}")
+        return None
+
+def process_s3_urls(references):
+    """Convert S3 URIs to presigned URLs in references"""
+    processed_refs = []
+    for ref in references:
+        if 'uri' in ref:
+            s3_url = ref['uri']
+            parsed_url = urlparse(s3_url)
+            bucket = parsed_url.netloc.split('.')[0]
+            key = parsed_url.path.lstrip('/')
+            presigned_url = generate_presigned_url(bucket, key)
+            if presigned_url:
+                ref['presigned_url'] = presigned_url
+                processed_refs.append(ref)
+    return processed_refs
+
 def extract_references(citations):
-    """
-    Extract all unique references from citations
-    Returns a list of dictionaries containing reference details
-    """
+    """Extract all unique references from citations"""
     references = []
-    seen_uris = set()  # To track unique URIs
+    seen_uris = set()
     
     for citation in citations:
         for reference in citation.get('retrievedReferences', []):
@@ -24,78 +55,107 @@ def extract_references(citations):
                 uri = reference['location']['s3Location']['uri']
                 if uri not in seen_uris:
                     seen_uris.add(uri)
-                    
-                    # Extract snippet if available
                     snippet = reference.get('content', {}).get('text', '').strip()
-                    
                     references.append({
                         'uri': uri,
                         'snippet': snippet,
                         'score': reference.get('score', 0)
                     })
     
-    # Sort references by score if available
     references.sort(key=lambda x: x['score'], reverse=True)
     return references
 
+def create_response(status_code, body):
+    """Create API Gateway response with CORS headers"""
+    return {
+        'statusCode': status_code,
+        'headers': {
+            'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
+            'Access-Control-Allow-Origin': '*',  # Replace with your Streamlit app domain in production
+            'Access-Control-Allow-Methods': 'OPTIONS,POST',
+            'Content-Type': 'application/json'
+        },
+        'body': json.dumps(body)
+    }
+
 def lambda_handler(event, context):
     try:
-        # 3.1. Retrieve User query/Question  
-        user_query = event['user_query']
-        
-        # 3.2. API Call to "retrieve_and_generate" function
-        client_knowledgebase = client.retrieve_and_generate(
-            input={
+        # Handle API Gateway event structure
+        if 'body' not in event:
+            return create_response(400, {
+                'error': 'Missing request body'
+            })
+
+        # Parse the request body
+        try:
+            body = json.loads(event['body']) if isinstance(event['body'], str) else event['body']
+        except json.JSONDecodeError:
+            return create_response(400, {
+                'error': 'Invalid JSON in request body'
+            })
+
+        # Extract user query and session ID
+        user_query = body.get('user_query')
+        session_id = body.get('sessionId')
+
+        if not user_query:
+            return create_response(400, {
+                'error': 'user_query is required in the request body'
+            })
+
+        # Prepare the request for Bedrock
+        retrieve_request = {
+            'input': {
                 'text': user_query
             },
-            retrieveAndGenerateConfiguration={
+            'retrieveAndGenerateConfiguration': {
                 'type': 'KNOWLEDGE_BASE',
                 'knowledgeBaseConfiguration': {
                     'knowledgeBaseId': knowledgeBaseID,
                     'modelArn': fundation_model_ARN,
                     'retrievalConfiguration': {
                         'vectorSearchConfiguration': {
-                            'numberOfResults': 10  # Increase number of results
+                            'numberOfResults': 10,
+                            'overrideSearchType': 'SEMANTIC'
                         }
                     }
                 }
             }
-        )
-                
-        # 3.3. Process all citations and references
-        print("----------- Reference Details -------------")
+        }
+
+        # Add sessionId if provided
+        if session_id:
+            retrieve_request['sessionId'] = session_id
+
+        # Call Bedrock
+        client_knowledgebase = client.retrieve_and_generate(**retrieve_request)
         
-        # Extract all references
+        # Process the response
         references = extract_references(client_knowledgebase['citations'])
+        references_with_urls = process_s3_urls(references)
         
-        # Get the generated response
+        # Get response text and session ID
         generated_response = client_knowledgebase['output']['text']
+        new_session_id = client_knowledgebase.get('sessionId')
         
-        # Create a list of S3 URIs for all references
-        s3_locations = [ref['uri'] for ref in references]
+        # Calculate URL expiration time
+        expiration_time = (datetime.utcnow() + timedelta(hours=1)).isoformat()
         
-        # 3.4 Final object to return
-        final_result = {
-            'statusCode': 200,
-            'query': user_query,
+        # Create success response
+        response_body = {
             'generated_response': generated_response,
-            's3_location': ','.join(s3_locations),  # Join all URIs with comma for backward compatibility
-            'detailed_references': references  # Include detailed reference information
+            'detailed_references': references_with_urls,
+            'urlExpirationTime': expiration_time,
+            'sessionId': new_session_id
         }
         
-        # 3.5 Print & Return result
-        print("Result details:\n", json.dumps(final_result, indent=2))
-        
-        return final_result
-        
+        return create_response(200, response_body)
+
     except Exception as e:
-        error_response = {
-            'statusCode': 500,
-            'query': event.get('user_query', ''),
+        print(f"Error: {str(e)}")
+        return create_response(500, {
             'error': str(e),
             'generated_response': 'An error occurred while processing your request.',
-            's3_location': 'N/A',
-            'detailed_references': []
-        }
-        print("Error:", str(e))
-        return error_response
+            'detailed_references': [],
+            'sessionId': session_id
+        })
