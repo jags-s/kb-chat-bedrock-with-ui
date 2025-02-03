@@ -79,6 +79,7 @@ def format_references(detailed_references, expiration_time=None):
     return references_html
 
 def call_api(query, session_id=None):
+    """Call the Lambda function through API Gateway"""
     api_url = API_URL
     headers = {"Content-Type": "application/json"}
     try:
@@ -102,7 +103,15 @@ def call_api(query, session_id=None):
         )
         
         response.raise_for_status()
-        return response.json()
+        response_data = response.json()
+        
+        # Extract data from the API Gateway response format
+        if isinstance(response_data, str):
+            response_data = json.loads(response_data)
+        
+        if 'body' in response_data:
+            return json.loads(response_data['body'])
+        return response_data
         
     except requests.exceptions.ConnectionError as e:
         print(f"Connection Error Details:")

@@ -71,36 +71,57 @@ def create_response(status_code, body):
         'statusCode': status_code,
         'headers': {
             'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
-            'Access-Control-Allow-Origin': '*',  # Replace with your Streamlit app domain in production
+            'Access-Control-Allow-Origin': '*',
             'Access-Control-Allow-Methods': 'OPTIONS,POST',
             'Content-Type': 'application/json'
         },
         'body': json.dumps(body)
     }
 
-def lambda_handler(event, context):
+def get_request_data(event):
+    """Extract user query and session ID from the event"""
     try:
-        # Handle API Gateway event structure
-        if 'body' not in event:
-            return create_response(400, {
-                'error': 'Missing request body'
-            })
+        # Print the received event for debugging
+        print(f"Received event: {json.dumps(event)}")
 
-        # Parse the request body
-        try:
-            body = json.loads(event['body']) if isinstance(event['body'], str) else event['body']
-        except json.JSONDecodeError:
-            return create_response(400, {
-                'error': 'Invalid JSON in request body'
-            })
+        # Handle different event types
+        if isinstance(event, dict):
+            # API Gateway event
+            if 'body' in event:
+                if isinstance(event['body'], str):
+                    body = json.loads(event['body'])
+                else:
+                    body = event['body']
+            # Direct Lambda invocation
+            else:
+                body = event
+        else:
+            raise ValueError("Invalid event format")
 
         # Extract user query and session ID
         user_query = body.get('user_query')
         session_id = body.get('sessionId')
 
+        return user_query, session_id
+
+    except Exception as e:
+        print(f"Error in get_request_data: {str(e)}")
+        raise
+
+def lambda_handler(event, context):
+    try:
+        # Get request data
+        try:
+            user_query, session_id = get_request_data(event)
+        except Exception as e:
+            return create_response(400, {
+                'error': f'Error processing request: {str(e)}'
+            })
+
+        # Validate user query
         if not user_query:
             return create_response(400, {
-                'error': 'user_query is required in the request body'
+                'error': 'user_query is required'
             })
 
         # Prepare the request for Bedrock
@@ -152,10 +173,10 @@ def lambda_handler(event, context):
         return create_response(200, response_body)
 
     except Exception as e:
-        print(f"Error: {str(e)}")
+        print(f"Error in lambda_handler: {str(e)}")
         return create_response(500, {
             'error': str(e),
             'generated_response': 'An error occurred while processing your request.',
             'detailed_references': [],
-            'sessionId': session_id
+            'sessionId': session_id if 'session_id' in locals() else None
         })
