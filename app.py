@@ -40,7 +40,7 @@ def check_password():
                     padding-top: 0 !important;
                 }
                 div.stImage {
-                    margin-top: -60px;
+                    margin-top: -20px;
                 }
             </style>
         """, unsafe_allow_html=True)
@@ -60,7 +60,7 @@ def check_password():
                     padding-top: 0 !important;
                 }
                 div.stImage {
-                    margin-top: -60px;
+                    margin-top: -20px;
                 }
             </style>
         """, unsafe_allow_html=True)

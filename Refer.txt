@@ -16,3 +16,6 @@ curl -v -X POST "https://kfvngqj2ok.execute-api.us-east-1.amazonaws.com/dev/bedr
         """, unsafe_allow_html=True)
 
         st.image("assets/img.png", use_container_width=True)
+
+
+TITAN_EMBEDDINGS_ARN        arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-text-v2
