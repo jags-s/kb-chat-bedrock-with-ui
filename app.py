@@ -10,133 +10,179 @@ load_dotenv()
 USERNAME = os.getenv("CHATBOT_USERNAME")
 PASSWORD = os.getenv("CHATBOT_PASSWORD")
 API_URL = os.getenv("API_URL")
-MAX_REFERENCES = int(os.getenv("MAX_REFERENCES"))
 
-# Custom CSS for styling
+# SS brand colors
+SS_BLUE = "#001aff"
+SS_NAVY = "#002A5C"
+SS_LIGHT_BLUE = "#E6F3FA"
+SS_GRAY = "#F5F5F5"
+
 def load_custom_css():
-    try:
-        with open('.streamlit/styles.css') as f:
-            st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
-    except Exception as e:
-        print(f"Error loading CSS: {e}")
+    """Load custom CSS styles from external file"""
+    with open('.streamlit/styles.css') as f:
+        st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
 
 def check_password():
     """Returns `True` if the user had the correct password."""
     def password_entered():
-        """Checks whether a password entered by the user is correct."""
         if st.session_state["username"] == USERNAME and st.session_state["password"] == PASSWORD:
             st.session_state["password_correct"] = True
-            del st.session_state["password"]  # Don't store password
-            del st.session_state["username"]  # Don't store username
+            del st.session_state["password"]
+            del st.session_state["username"]
         else:
             st.session_state["password_correct"] = False
 
     if "password_correct" not in st.session_state:
-        st.markdown('<h1 class="main-title">GHR AI Assistant</h1>', unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-
+        st.markdown(f'<div class="chat-header"><h1>SS AI Assistant</h1></div>', unsafe_allow_html=True)
+        st.markdown('<div style="margin: 3em 0;"></div>', unsafe_allow_html=True)
         st.text_input("Username", key="username")
         st.text_input("Password", type="password", key="password")
         st.button("Login", on_click=password_entered)
-        st.markdown('</div>', unsafe_allow_html=True)
         return False
-    elif not st.session_state["password_correct"]:
-        st.markdown('<h1 class="main-title">GHR AI Assistant</h1>', unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+    
+    if not st.session_state["password_correct"]:
+        st.markdown(f'<div class="chat-header"><h1>SS AI Assistant</h1></div>', unsafe_allow_html=True)
+        st.markdown('<div style="margin: 3em 0;"></div>', unsafe_allow_html=True)
         st.text_input("Username", key="username")
         st.text_input("Password", type="password", key="password")
         st.button("Login", on_click=password_entered)
         st.error("Invalid username or password")
-        st.markdown('</div>', unsafe_allow_html=True)
         return False
-    else:
-        return True
+    
+    return True
 
-def format_references(detailed_references, expiration_time=None):
-    """Format references as simple HTML links"""
-    if not detailed_references:
-        return ""
+def display_reference_details(ref):
+    """Display details for a single reference"""
+    st.markdown('<div class="reference-container">', unsafe_allow_html=True)
     
-    references = detailed_references[:MAX_REFERENCES]
+    # Display S3 URI if available
+    if uri := ref.get('uri'):
+        st.markdown(
+            f'''
+            <div class="reference-section">
+                <div class="reference-section-title">Source:</div>
+                <div class="reference-uri">{uri}</div>
+            </div>
+            ''', 
+            unsafe_allow_html=True
+        )
     
-    references_html = "<div class='references'><strong>References:</strong><br>"
+    # Display snippet if available
+    if snippet := ref.get('snippet'):
+        st.markdown(
+            f'''
+            <div class="reference-section">
+                <div class="reference-section-title">Excerpt:</div>
+                <div class="reference-snippet">{snippet}</div>
+            </div>
+            ''', 
+            unsafe_allow_html=True
+        )
     
-    for i, ref in enumerate(references, 1):
-        presigned_url = ref.get('presigned_url', '')
-        if presigned_url:
-            references_html += f"<a href='{presigned_url}' target='_blank'>Reference {i}</a><br>"
+    # Display source link and expiration if available
+    if presigned_url := ref.get('presigned_url'):
+        st.markdown(
+            f'''
+            <div class="reference-footer">
+                <a href="{presigned_url}" target="_blank">View Source Document</a>
+                <p>Note: Source document link expires in 1 hour</p>
+            </div>
+            ''', 
+            unsafe_allow_html=True
+        )
     
-    if expiration_time:
-        try:
-            expiry = datetime.fromisoformat(expiration_time)
-            references_html += f"<div class='expiration-time'>Links expire at: {expiry.strftime('%Y-%m-%d %H:%M:%S')} UTC</div>"
-        except ValueError:
-            pass
+    st.markdown('</div>', unsafe_allow_html=True)
+
+def show_references(references, message_idx):
+    """Display references in a compact horizontal list format"""
+    if not references:
+        return
+
+    ref_key = f"selected_ref_{message_idx}"
+    button_key = f"ref_button_clicked_{message_idx}"
     
-    references_html += "</div>"
-    return references_html
+    # Initialize session state variables if they don't exist
+    if ref_key not in st.session_state:
+        st.session_state[ref_key] = 0
+    if button_key not in st.session_state:
+        st.session_state[button_key] = False
+
+    with st.expander("📚 References", expanded=False):
+        # Create horizontal list of reference buttons
+        cols = st.columns(len(references))
+        
+        for i, col in enumerate(cols):
+            with col:
+                # Use a unique key for each button
+                if st.button(
+                    f"Reference {i+1}",
+                    key=f"ref_btn_{message_idx}_{i}",
+                    help=f"View Reference {i+1} details",
+                    use_container_width=True
+                ):
+                    st.session_state[ref_key] = i
+                    st.session_state[button_key] = True
+        
+        # Only display reference details if we have a valid selection
+        if 0 <= st.session_state[ref_key] < len(references):
+            selected_ref = references[st.session_state[ref_key]]
+            display_reference_details(selected_ref)
+
+# def show_references(references, message_idx):
+#     """Display references in a compact horizontal list format"""
+#     if not references:
+#         return
+
+#     with st.expander("📚 References", expanded=False):
+#         ref_key = f"selected_ref_{message_idx}"
+        
+#         # Initialize reference selection in session state
+#         if ref_key not in st.session_state:
+#             st.session_state[ref_key] = 0
+        
+#         # Create horizontal list of reference buttons
+#         cols = st.columns(len(references))
+        
+#         for i, col in enumerate(cols):
+#             with col:
+#                 if st.button(
+#                     f"Reference {i+1}",
+#                     key=f"ref_btn_{message_idx}_{i}",
+#                     help=f"View Reference {i+1} details"
+#                 ):
+#                     st.session_state[ref_key] = i
+#                     st.rerun()
+        
+#         # Display selected reference details
+#         selected_ref = references[st.session_state[ref_key]]
+#         display_reference_details(selected_ref)
 
 def call_api(query, session_id=None):
     """Call the Lambda function through API Gateway"""
-    api_url = API_URL
-    headers = {"Content-Type": "application/json"}
     try:
         request_body = {
             "user_query": query
         }
-        
-        # Include session_id if available
         if session_id:
             request_body["sessionId"] = session_id
             
-        print(f"Attempting to call API at: {api_url}")
-        print(f"Headers: {headers}")
-        print(f"Request body: {request_body}")
-        
         response = requests.post(
-            url=api_url,
-            headers=headers,
+            url=API_URL,
+            headers={"Content-Type": "application/json"},
             json=request_body,
             timeout=30
         )
         
         response.raise_for_status()
-        response_data = response.json()
-        
-        # Extract data from the API Gateway response format
-        if isinstance(response_data, str):
-            response_data = json.loads(response_data)
-        
-        if 'body' in response_data:
-            return json.loads(response_data['body'])
-        return response_data
-        
-    except requests.exceptions.ConnectionError as e:
-        print(f"Connection Error Details:")
-        print(f"Error Type: {type(e).__name__}")
-        print(f"Error Message: {str(e)}")
-        print(f"API URL: {api_url}")
-        return None
-        
-    except requests.exceptions.Timeout as e:
-        print(f"Timeout Error: {str(e)}")
-        print(f"Request timed out after 30 seconds")
-        return None
+        return response.json()
         
     except requests.exceptions.RequestException as e:
-        print(f"Request Exception Details:")
-        print(f"Error Type: {type(e).__name__}")
-        print(f"Error Message: {str(e)}")
-        if hasattr(e, 'response'):
-            print(f"Response Status: {e.response.status_code}")
-            print(f"Response Body: {e.response.text}")
+        print(f"API Error: {str(e)}")
         return None
 
 def main():
     st.set_page_config(
-        page_title="Just Ask",
+        page_title="SS AI Assistant",
         page_icon="🤖",
         layout="centered",
         initial_sidebar_state="collapsed",
@@ -147,64 +193,67 @@ def main():
     if not check_password():
         return
 
-    st.markdown('<h2 class="main-title" style="position: sticky; top: 0; background-color: #001aff; color: white; z-index: 999;text-align: center;">Just Ask</h2>', unsafe_allow_html=True)
+    st.markdown('<div class="chat-header"><h2>SS AI Assistant</h2></div>', unsafe_allow_html=True)
     st.markdown('<h5 class="sub-title" style="text-align: center; color: #001aff;">SS Employee Concierge</h5>', unsafe_allow_html=True)
-
-    # Initialize session state variables
+    # Initialize session state
     if "messages" not in st.session_state:
         st.session_state.messages = []
     if "session_id" not in st.session_state:
         st.session_state.session_id = None
 
     # Display chat history
-    for message in st.session_state.messages:
+    for idx, message in enumerate(st.session_state.messages):
         role = message["role"]
         content = message["content"]
-        references = message.get("references", "")
+        references = message.get("references", [])
         
         message_class = "user-message" if role == "user" else "assistant-message"
-        st.markdown(
-            f'<div class="{message_class}">{content}{references}</div>',
-            unsafe_allow_html=True
-        )
+        st.markdown(f'<div class="{message_class}">{content}</div>', unsafe_allow_html=True)
+        
+        # Show references for assistant messages with references
+        if role == "assistant" and references:
+            show_references(references, idx)
 
     # Chat input and processing
     if prompt := st.chat_input("Ask your question...", key="chat_input"):
-        st.markdown(f'<div class="user-message">{prompt}</div>', unsafe_allow_html=True)
         st.session_state.messages.append({"role": "user", "content": prompt})
+        st.rerun()
 
+    # Process last user message if it exists and hasn't been responded to
+    if (st.session_state.messages and 
+        st.session_state.messages[-1]["role"] == "user"):
+        
         with st.spinner("Processing your request..."):
-            result = call_api(prompt, st.session_state.session_id)
+            result = call_api(st.session_state.messages[-1]["content"], 
+                            st.session_state.session_id)
 
         if result:
-            # Update session ID if provided
-            if 'sessionId' in result:
-                st.session_state.session_id = result['sessionId']
+            if isinstance(result, str):
+                result = json.loads(result)
+            if 'body' in result:
+                result = json.loads(result['body'])
                 
             response_content = result.get('generated_response', 'No response available')
             detailed_references = result.get('detailed_references', [])
-            expiration_time = result.get('urlExpirationTime')
             
-            references_html = format_references(detailed_references, expiration_time)
-            
-            st.markdown(
-                f'<div class="assistant-message">{response_content}{references_html}</div>',
-                unsafe_allow_html=True
-            )
+            if 'sessionId' in result:
+                st.session_state.session_id = result['sessionId']
             
             st.session_state.messages.append({
                 "role": "assistant",
                 "content": response_content,
-                "references": references_html
+                "references": detailed_references
             })
+            st.rerun()
         else:
             error_message = "Failed to get a valid response from the API."
             st.error(error_message)
             st.session_state.messages.append({
                 "role": "assistant",
                 "content": error_message,
-                "references": ""
+                "references": []
             })
+            st.rerun()
 
 if __name__ == "__main__":
     main()

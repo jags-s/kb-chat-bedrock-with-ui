@@ -3,73 +3,100 @@
 #MainMenu {visibility: hidden;}                /* Hamburger menu */
 header {visibility: hidden;}                   /* Header with deployment button */
 
-/* Title styling */
-.stMarkdown h1 {
-    color: #001aff !important;
+.stApp {
+    background-color: white;
 }
 
-/* Chat message styling */
 .user-message {
-    background-color: #F5F5F5;
-    padding: 1rem;
+    background-color: #E6F3FA;
+    padding: 15px;
+    margin: 10px 0;
     border-radius: 10px;
-    margin: 0.5rem 0;
-    border-left: 4px solid #007AC0;
+    border-left: 4px solid #001aff;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
 .assistant-message {
-    background-color: #E6F3FA;
-    padding: 1rem;
+    background-color: white;
+    padding: 15px;
+    margin: 10px 0;
     border-radius: 10px;
-    margin: 0.5rem 0;
     border-left: 4px solid #002A5C;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
-/* Login form styling */
-.login-container {
-    max-width: 400px;
-    margin: 2rem auto;
-    padding: 2rem;
-    background-color: #F5F5F5;
-    border-radius: 10px;
-    border-left: 4px solid #007AC0;
+.reference-list {
+    list-style-type: none;
+    padding: 0;
+    margin: 5px 0;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
 }
 
-.login-title {
+.reference-section {
+    margin: 8px 0;
+}
+
+.reference-section-title {
     color: #002A5C;
-    font-size: 1.5rem;
-    margin-bottom: 1rem;
-}
-
-/* Override Streamlit's default chat message styling */
-.stChatMessage {
-    background-color: transparent !important;
-    border: none !important;
-}
-
-.stChatMessageContent {
-    background-color: transparent !important;
-}
-
-/* Hide default chat avatars */
-.stChatMessageAvatar {
-    display: none !important;
-}
-
-/* References styling */
-.references {
-    margin-top: 0.5rem;
     font-size: 0.9em;
-    color: #00508C;
+    font-weight: 600;
+    margin-bottom: 4px;
 }
 
-.references a {
-    color: #007AC0;
-    text-decoration: none;
+.reference-uri {
+    font-family: monospace;
+    background-color: #F5F5F5;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 0.9em;
+    color: #002A5C;
+    margin: 0;
 }
 
-.references a:hover {
-    text-decoration: underline;
+.reference-snippet {
+    background-color: #E6F3FA;
+    padding: 12px;
+    border-radius: 8px;
+    margin: 0;
+    border-left: 4px solid #001aff;
 }
 
+.reference-footer {
+    font-size: 0.8em;
+    color: #666;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #eee;
+}
 
+.chat-header {
+    background-color: #001aff;
+    padding: 2px;
+    border-radius: 2px;
+    margin-bottom: 2px;
+    color: white;
+    text-align: center;
+}
+
+.stButton button {
+    background-color: #E6F3FA;
+    color: #002A5C;
+    border: 1px solid #001aff;
+    transition: all 0.3s ease;
+}
+
+.stButton button:hover {
+    background-color: #001aff;
+    color: white;
+}
+
+div[data-testid="stExpander"] {
+    border: none;
+    box-shadow: none;
+}
+
+.reference-container {
+    margin-top: 10px;
+}
