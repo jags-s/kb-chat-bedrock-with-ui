@@ -33,7 +33,20 @@ def check_password():
             st.session_state["password_correct"] = False
 
     if "password_correct" not in st.session_state:
-        st.markdown(f'<div class="chat-header"><h1>SS AI Assistant</h1></div>', unsafe_allow_html=True)
+        # st.markdown(f'<div class="chat-header"><h1>SS AI Assistant</h1></div>', unsafe_allow_html=True)
+        st.markdown("""
+            <style>
+                .block-container {
+                    padding-top: 0 !important;
+                }
+                div.stImage {
+                    margin-top: -60px;
+                }
+            </style>
+        """, unsafe_allow_html=True)
+
+        st.image("assets/img.png", use_container_width=True)
+
         st.markdown('<div style="margin: 3em 0;"></div>', unsafe_allow_html=True)
         st.text_input("Username", key="username")
         st.text_input("Password", type="password", key="password")
@@ -41,7 +54,20 @@ def check_password():
         return False
     
     if not st.session_state["password_correct"]:
-        st.markdown(f'<div class="chat-header"><h1>SS AI Assistant</h1></div>', unsafe_allow_html=True)
+        st.markdown("""
+            <style>
+                .block-container {
+                    padding-top: 0 !important;
+                }
+                div.stImage {
+                    margin-top: -60px;
+                }
+            </style>
+        """, unsafe_allow_html=True)
+
+        st.image("assets/img.png", use_container_width=True)
+    
+        # st.markdown(f'<div class="chat-header"><h1>SS AI Assistant</h1></div>', unsafe_allow_html=True)
         st.markdown('<div style="margin: 3em 0;"></div>', unsafe_allow_html=True)
         st.text_input("Username", key="username")
         st.text_input("Password", type="password", key="password")
@@ -193,8 +219,28 @@ def main():
     if not check_password():
         return
 
-    st.markdown('<div class="chat-header"><h2>SS AI Assistant</h2></div>', unsafe_allow_html=True)
-    st.markdown('<h5 class="sub-title" style="text-align: center; color: #001aff;">SS Employee Concierge</h5>', unsafe_allow_html=True)
+
+    st.markdown("""
+        <style>
+            .block-container {
+                padding-top: 0 !important;
+            }
+            div.stImage {
+                margin-top: -60px;
+            }
+        </style>
+    """, unsafe_allow_html=True)
+
+    st.image("assets/img.png", use_container_width=True)
+
+
+    # st.markdown('<div class="chat-header"><h2>SS AI Assistant</h2></div>', unsafe_allow_html=True)
+    # st.image("assets/img.png", width=600, height=100)
+    # st.image("assets/img.png", use_column_width=True)
+    # Correct way using use_container_width
+    # st.image("assets/img.png", use_container_width=True)
+
+    st.markdown('<h5 class="sub-title" style="text-align: center; color: #001aff;">SS Employee Concierge Just Ask</h5>', unsafe_allow_html=True)
     # Initialize session state
     if "messages" not in st.session_state:
         st.session_state.messages = []

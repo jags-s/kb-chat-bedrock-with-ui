@@ -2,3 +2,17 @@
 curl -v -X POST "https://kfvngqj2ok.execute-api.us-east-1.amazonaws.com/dev/bedrokChatApiRes" \
 -H "Content-Type: application/json" \
 -d '{"user_query": "leave policy"}'
+
+
+        st.markdown("""
+            <style>
+                .block-container {
+                    padding-top: 0 !important;
+                }
+                div.stImage {
+                    margin-top: -60px;
+                }
+            </style>
+        """, unsafe_allow_html=True)
+
+        st.image("assets/img.png", use_container_width=True)
