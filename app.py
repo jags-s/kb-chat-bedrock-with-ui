@@ -37,10 +37,10 @@ def check_password():
         st.markdown("""
             <style>
                 .block-container {
-                    padding-top: 0 !important;
+                    padding-top: 1 !important;
                 }
                 div.stImage {
-                    margin-top: -20px;
+                    margin-top: -60px;
                 }
             </style>
         """, unsafe_allow_html=True)
@@ -57,10 +57,10 @@ def check_password():
         st.markdown("""
             <style>
                 .block-container {
-                    padding-top: 0 !important;
+                    padding-top: 1 !important;
                 }
                 div.stImage {
-                    margin-top: -20px;
+                    margin-top: -60px;
                 }
             </style>
         """, unsafe_allow_html=True)
