@@ -3,7 +3,10 @@ import json
 import boto3
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
+from dotenv import load_dotenv
 
+# Load environment variables from .env file
+load_dotenv()
 # Initialize AWS clients once outside the handler for better performance
 bedrock_agent_runtime = boto3.client('bedrock-agent-runtime')
 s3_client = boto3.client('s3')
@@ -12,6 +15,16 @@ s3_client = boto3.client('s3')
 KNOWLEDGE_BASE_ID = os.environ['KNOWLEDGE_BASE_ID']
 FOUNDATION_MODEL_ARN = os.environ['FM_ARN']
 
+# Custom prompt templates with required placeholders
+PROMPT_TEMPLATE = """
+Context: You are an AI assistant helping with queries based on the provided knowledge base. 
+Use the following search results to answer the question:
+$search_results$
+
+Question: {user_query}
+
+Please provide a clear and accurate response based solely on the retrieved information.
+"""
 def create_response(status_code, body):
     return {
         'statusCode': status_code,
@@ -101,8 +114,23 @@ def lambda_handler(event, context):
                     'retrievalConfiguration': {
                         'vectorSearchConfiguration': {
                             'numberOfResults': 5,
-                            'overrideSearchType': 'SEMANTIC'
+                            'overrideSearchType': 'HYBRID'
                         }
+                    }
+                },
+                'generationConfiguration': {
+                    'promptTemplate': {
+                        'textPromptTemplate': PROMPT_TEMPLATE.format(user_query=user_query)
+                    },
+                    'inferenceConfig': {
+                        'textInferenceConfig': {
+                            'maxTokens': 512,
+                            'temperature': 0.1,
+                            'topP': 0.9
+                        }
+                    },
+                    'performanceConfig': {
+                        'latency': 'standard'
                     }
                 }
             }
