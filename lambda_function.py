@@ -3,29 +3,70 @@ import json
 import boto3
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
-from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv()
-# Initialize AWS clients once outside the handler for better performance
-bedrock_agent_runtime = boto3.client('bedrock-agent-runtime')
+# Initialize AWS clients
+service_name = 'bedrock-agent-runtime'
+client = boto3.client(service_name)
 s3_client = boto3.client('s3')
 
-# Get environment variables
-KNOWLEDGE_BASE_ID = os.environ['KNOWLEDGE_BASE_ID']
-FOUNDATION_MODEL_ARN = os.environ['FM_ARN']
+knowledgeBaseID = os.environ['KNOWLEDGE_BASE_ID']
+fundation_model_ARN = os.environ['FM_ARN']
 
-# Custom prompt templates with required placeholders
-PROMPT_TEMPLATE = """
-Context: You are an AI assistant helping with queries based on the provided knowledge base. 
-Use the following search results to answer the question:
-$search_results$
+def generate_presigned_url(bucket, key, expiration=3600):
+    """Generate a presigned URL for an S3 object"""
+    try:
+        url = s3_client.generate_presigned_url(
+            'get_object',
+            Params={
+                'Bucket': bucket,
+                'Key': key,
+                'ResponseContentDisposition': 'inline'
+            },
+            ExpiresIn=expiration
+        )
+        return url
+    except Exception as e:
+        print(f"Error generating presigned URL: {str(e)}")
+        return None
 
-Question: {user_query}
+def process_s3_urls(references):
+    """Convert S3 URIs to presigned URLs in references"""
+    processed_refs = []
+    for ref in references:
+        if 'uri' in ref:
+            s3_url = ref['uri']
+            parsed_url = urlparse(s3_url)
+            bucket = parsed_url.netloc.split('.')[0]
+            key = parsed_url.path.lstrip('/')
+            presigned_url = generate_presigned_url(bucket, key)
+            if presigned_url:
+                ref['presigned_url'] = presigned_url
+                processed_refs.append(ref)
+    return processed_refs
 
-Please provide a clear and accurate response based solely on the retrieved information.
-"""
+def extract_references(citations):
+    """Extract all unique references from citations"""
+    references = []
+    seen_uris = set()
+    
+    for citation in citations:
+        for reference in citation.get('retrievedReferences', []):
+            if 'location' in reference and 's3Location' in reference['location']:
+                uri = reference['location']['s3Location']['uri']
+                if uri not in seen_uris:
+                    seen_uris.add(uri)
+                    snippet = reference.get('content', {}).get('text', '').strip()
+                    references.append({
+                        'uri': uri,
+                        'snippet': snippet,
+                        'score': reference.get('score', 0)
+                    })
+    
+    references.sort(key=lambda x: x['score'], reverse=True)
+    return references
+
 def create_response(status_code, body):
+    """Create API Gateway response with CORS headers"""
     return {
         'statusCode': status_code,
         'headers': {
@@ -37,121 +78,107 @@ def create_response(status_code, body):
         'body': json.dumps(body)
     }
 
-def generate_presigned_url(bucket, key):
-    try:
-        return s3_client.generate_presigned_url(
-            'get_object',
-            Params={
-                'Bucket': bucket,
-                'Key': key,
-                'ResponseContentDisposition': 'inline'
-            },
-            ExpiresIn=1800
-        )
-    except Exception as e:
-        print(f"Error generating presigned URL: {str(e)}")
-        return None
-
-def process_references(citations):
-    """Process citations and return references with presigned URLs"""
-    references = []
-    seen_uris = set()
-    
-    for citation in citations:
-        for reference in citation.get('retrievedReferences', []):
-            location = reference.get('location', {}).get('s3Location', {})
-            if not location:
-                continue
-                
-            uri = location.get('uri')
-            if not uri or uri in seen_uris:
-                continue
-                
-            seen_uris.add(uri)
-            parsed_url = urlparse(uri)
-            bucket = parsed_url.netloc.split('.')[0]
-            key = parsed_url.path.lstrip('/')
-            
-            presigned_url = generate_presigned_url(bucket, key)
-            if presigned_url:
-                references.append({
-                    'uri': uri,
-                    'presigned_url': presigned_url,
-                    'snippet': reference.get('content', {}).get('text', '').strip(),
-                    'score': reference.get('score', 0)
-                })
-    
-    return sorted(references, key=lambda x: x['score'], reverse=True)
-
 def get_request_data(event):
+    """Extract user query and session ID from the event"""
     try:
-        body = event.get('body')
-        if isinstance(body, str):
-            body = json.loads(body)
-        elif not isinstance(body, dict):
-            body = event
-            
-        return body.get('user_query'), body.get('sessionId')
+        # Print the received event for debugging
+        print(f"Received event: {json.dumps(event)}")
+
+        # Handle different event types
+        if isinstance(event, dict):
+            # API Gateway event
+            if 'body' in event:
+                if isinstance(event['body'], str):
+                    body = json.loads(event['body'])
+                else:
+                    body = event['body']
+            # Direct Lambda invocation
+            else:
+                body = event
+        else:
+            raise ValueError("Invalid event format")
+
+        # Extract user query and session ID
+        user_query = body.get('user_query')
+        session_id = body.get('sessionId')
+
+        return user_query, session_id
+
     except Exception as e:
-        print(f"Error parsing request data: {str(e)}")
-        raise ValueError("Invalid request format")
+        print(f"Error in get_request_data: {str(e)}")
+        raise
 
 def lambda_handler(event, context):
     try:
-        # Extract and validate request data
-        user_query, session_id = get_request_data(event)
-        if not user_query:
-            return create_response(400, {'error': 'user_query is required'})
+        # Get request data
+        try:
+            user_query, session_id = get_request_data(event)
+        except Exception as e:
+            return create_response(400, {
+                'error': f'Error processing request: {str(e)}'
+            })
 
-        # Prepare knowledge base request
+        # Validate user query
+        if not user_query:
+            return create_response(400, {
+                'error': 'user_query is required'
+            })
+
+        # Prepare the request for Bedrock
         retrieve_request = {
-            'input': {'text': user_query},
+            'input': {
+                'text': user_query
+            },
             'retrieveAndGenerateConfiguration': {
                 'type': 'KNOWLEDGE_BASE',
                 'knowledgeBaseConfiguration': {
-                    'knowledgeBaseId': KNOWLEDGE_BASE_ID,
-                    'modelArn': FOUNDATION_MODEL_ARN,
+                    'knowledgeBaseId': knowledgeBaseID,
+                    'modelArn': fundation_model_ARN,
                     'retrievalConfiguration': {
                         'vectorSearchConfiguration': {
-                            'numberOfResults': 5,
-                            'overrideSearchType': 'HYBRID'
-                        }
-                    }
-                },
-                'generationConfiguration': {
-                    'promptTemplate': {
-                        'textPromptTemplate': PROMPT_TEMPLATE.format(user_query=user_query)
-                    },
-                    'inferenceConfig': {
-                        'textInferenceConfig': {
-                            'maxTokens': 512,
-                            'temperature': 0.1,
-                            'topP': 0.9
+                            'numberOfResults': 10,
+                            'overrideSearchType': 'SEMANTIC'
                         }
                     },
-                    'performanceConfig': {
-                        'latency': 'standard'
+                    # Add parameters to ensure responses are grounded in knowledge base
+                    'generationConfiguration': {
+                        'inferenceConfig': {
+                            'textInferenceConfig': {
+                                'maxTokens': 512,
+                                'temperature': 0.1,
+                                'topP': 0.9
+                            }
+                        }
                     }
                 }
             }
         }
 
+        # Add sessionId if provided for conversation continuity
         if session_id:
             retrieve_request['sessionId'] = session_id
 
-        # Get response from knowledge base
-        kb_response = bedrock_agent_runtime.retrieve_and_generate(**retrieve_request)
+        # Call Bedrock
+        client_knowledgebase = client.retrieve_and_generate(**retrieve_request)
         
-        # Process references and get the generated response
-        references = process_references(kb_response['citations'])
-        generated_response = kb_response['output']['text']
+        # Process the response
+        references = extract_references(client_knowledgebase['citations'])
+        references_with_urls = process_s3_urls(references)
         
-        # Create response body
+        # Get response text and session ID
+        generated_response = client_knowledgebase['output']['text']
+        new_session_id = client_knowledgebase.get('sessionId')
+        
+        # Calculate URL expiration time
+        expiration_time = (datetime.utcnow() + timedelta(hours=1)).isoformat()
+        
+        # Create success response with references for transparency
         response_body = {
             'generated_response': generated_response,
-            'detailed_references': references,
-            'urlExpirationTime': (datetime.utcnow() + timedelta(hours=1)).isoformat(),
-            'sessionId': session_id
+            'detailed_references': references_with_urls,
+            'urlExpirationTime': expiration_time,
+            'sessionId': new_session_id,
+            'sourceCount': len(references_with_urls)  # Add count of sources used
         }
         
         return create_response(200, response_body)
