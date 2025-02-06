@@ -223,7 +223,7 @@ def main():
     st.markdown("""
         <style>
             .block-container {
-                padding-top: 0 !important;
+                padding-top: 1 !important;
             }
             div.stImage {
                 margin-top: -60px;

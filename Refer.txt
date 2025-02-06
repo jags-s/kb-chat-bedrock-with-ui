@@ -1,3 +1,20 @@
+create model evualation job that uses llm as judge
+https://docs.aws.amazon.com/bedrock/latest/userguide/evaluation-judge.html
+
+https://docs.aws.amazon.com/bedrock/latest/userguide/evaluation-kb.html
+
+Supported evaluator models
+    You need access to at least one of the following Amazon Bedrock foundation models. These are the available judge models. To learn more about gaining access to models and region availability, see Access Amazon Bedrock foundation models.
+
+    Mistral Large – mistral.mistral-large-2402-v1:0
+
+    Anthropic Claude 3.5 Sonnet – anthropic.claude-3-5-sonnet-20240620-v1:0
+
+    Anthropic Claude 3 Haiku – anthropic.claude-3-haiku-20240307-v1:0
+
+    Meta Llama 3.1 70B Instruct – meta.llama3-1-70b-instruct-v1:0
+
+
 # Using curl with verbose output
 curl -v -X POST "https://kfvngqj2ok.execute-api.us-east-1.amazonaws.com/dev/bedrokChatApiRes" \
 -H "Content-Type: application/json" \

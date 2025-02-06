@@ -136,20 +136,55 @@ def lambda_handler(event, context):
                     'modelArn': fundation_model_ARN,
                     'retrievalConfiguration': {
                         'vectorSearchConfiguration': {
-                            'numberOfResults': 10,
-                            'overrideSearchType': 'SEMANTIC'
+                            'numberOfResults': 3,
+                            'overrideSearchType': 'SEMANTIC',
+                            'rerankingConfiguration': {
+                                'type': 'BEDROCK_RERANKING_MODEL',
+                                'bedrockRerankingConfiguration': {
+                                    'modelConfiguration': {
+                                        'modelArn': fundation_model_ARN,
+                                        'additionalModelRequestFields': {
+                                            'reranking_threshold': 0.7 
+                                        }
+                                    }
+                                }
+                            }
                         }
                     },
                     # Add parameters to ensure responses are grounded in knowledge base
                     'generationConfiguration': {
                         'inferenceConfig': {
                             'textInferenceConfig': {
-                                'maxTokens': 512,
                                 'temperature': 0.1,
                                 'topP': 0.9
                             }
+                        },
+                        'promptTemplate': {
+                            'textPromptTemplate': """Please provide a clear, accurate, and concise response based solely on the provided knowledge base information. If the information is not available in the knowledge base, please state that explicitly. 
+                            Search results:
+                            $search_results$
+
+                            Question: {input}
+
+                            Please ensure your response:
+                            1. Is factual and grounded in the provided references
+                            2. Acknowledges any uncertainty
+                            3. Cites specific sources when possible
+
+                            Response:"""
                         }
-                    }
+                    },
+                     "orchestrationConfiguration": { 
+                        'inferenceConfig': {
+                            'textInferenceConfig': {
+                                'temperature': 0.0,
+                                'topP': 0.9
+                            }
+                        },
+                        'queryTransformationConfiguration': {
+                            'type': 'QUERY_DECOMPOSITION'
+                        }
+                     }
                 }
             }
         }
