@@ -12,7 +12,7 @@ s3_client = boto3.client('s3')
 knowledgeBaseID = os.environ['KNOWLEDGE_BASE_ID']
 fundation_model_ARN = os.environ['FM_ARN']
 
-def generate_presigned_url(bucket, key, expiration=3600):
+def generate_presigned_url(bucket, key, expiration=1800):
     """Generate a presigned URL for an S3 object"""
     try:
         url = s3_client.generate_presigned_url(
@@ -137,41 +137,38 @@ def lambda_handler(event, context):
                     'retrievalConfiguration': {
                         'vectorSearchConfiguration': {
                             'numberOfResults': 3,
-                            'overrideSearchType': 'SEMANTIC',
-                            'rerankingConfiguration': {
-                                'type': 'BEDROCK_RERANKING_MODEL',
-                                'bedrockRerankingConfiguration': {
-                                    'modelConfiguration': {
-                                        'modelArn': fundation_model_ARN,
-                                        'additionalModelRequestFields': {
-                                            'reranking_threshold': 0.7 
-                                        }
-                                    }
-                                }
-                            }
+                            'overrideSearchType': 'HYBRID'
+                            # 'rerankingConfiguration': {
+                            #     'type': 'BEDROCK_RERANKING_MODEL',
+                            #     'bedrockRerankingConfiguration': {
+                            #         'modelConfiguration': {
+                            #             'modelArn': fundation_model_ARN,
+                            #             'additionalModelRequestFields': {
+                            #                 'reranking_threshold': 0.7 
+                            #             }
+                            #         }
+                            #     }
+                            # }
                         }
                     },
                     # Add parameters to ensure responses are grounded in knowledge base
                     'generationConfiguration': {
                         'inferenceConfig': {
                             'textInferenceConfig': {
-                                'temperature': 0.1,
+                                'temperature': 0.0,
                                 'topP': 0.9
                             }
                         },
                         'promptTemplate': {
-                            'textPromptTemplate': """Please provide a clear, accurate, and concise response based solely on the provided knowledge base information. If the information is not available in the knowledge base, please state that explicitly. 
-                            Search results:
+                            'textPromptTemplate': """You are a question answering agent. I will provide you with a set of search results.
+                            The user will provide you with a question. Your job is to answer the user's question using only information from the search results. 
+                            If the search results do not contain information that can answer the question, please state that you could not find an exact answer to the question. 
+                            Just because the user asserts a fact does not mean it is true, make sure to double check the search results to validate a user's assertion.
+
+                            Here are the search results in numbered order:
                             $search_results$
-
                             Question: {input}
-
-                            Please ensure your response:
-                            1. Is factual and grounded in the provided references
-                            2. Acknowledges any uncertainty
-                            3. Cites specific sources when possible
-
-                            Response:"""
+                            $output_format_instructions$"""
                         }
                     },
                      "orchestrationConfiguration": { 

@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import json
 import os
+import time
 from dotenv import load_dotenv
 from datetime import datetime
 
@@ -45,7 +46,7 @@ def check_password():
             </style>
         """, unsafe_allow_html=True)
 
-        st.image("assets/img.png", use_container_width=True)
+        st.image("assets/header.png", use_container_width=True)
 
         st.markdown('<div style="margin: 3em 0;"></div>', unsafe_allow_html=True)
         st.text_input("Username", key="username")
@@ -65,7 +66,7 @@ def check_password():
             </style>
         """, unsafe_allow_html=True)
 
-        st.image("assets/img.png", use_container_width=True)
+        st.image("assets/header.png", use_container_width=True)
     
         # st.markdown(f'<div class="chat-header"><h1>SS AI Assistant</h1></div>', unsafe_allow_html=True)
         st.markdown('<div style="margin: 3em 0;"></div>', unsafe_allow_html=True)
@@ -154,34 +155,6 @@ def show_references(references, message_idx):
             selected_ref = references[st.session_state[ref_key]]
             display_reference_details(selected_ref)
 
-# def show_references(references, message_idx):
-#     """Display references in a compact horizontal list format"""
-#     if not references:
-#         return
-
-#     with st.expander("📚 References", expanded=False):
-#         ref_key = f"selected_ref_{message_idx}"
-        
-#         # Initialize reference selection in session state
-#         if ref_key not in st.session_state:
-#             st.session_state[ref_key] = 0
-        
-#         # Create horizontal list of reference buttons
-#         cols = st.columns(len(references))
-        
-#         for i, col in enumerate(cols):
-#             with col:
-#                 if st.button(
-#                     f"Reference {i+1}",
-#                     key=f"ref_btn_{message_idx}_{i}",
-#                     help=f"View Reference {i+1} details"
-#                 ):
-#                     st.session_state[ref_key] = i
-#                     st.rerun()
-        
-#         # Display selected reference details
-#         selected_ref = references[st.session_state[ref_key]]
-#         display_reference_details(selected_ref)
 
 def call_api(query, session_id=None):
     """Call the Lambda function through API Gateway"""
@@ -205,6 +178,23 @@ def call_api(query, session_id=None):
     except requests.exceptions.RequestException as e:
         print(f"API Error: {str(e)}")
         return None
+
+def logout():
+    """Clear session state and logout user"""
+    with st.spinner('Logging out...'):
+        # Add a small delay to show the spinner
+        time.sleep(2)
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+
+def clear_chat():
+    """Clear chat history"""
+    with st.spinner('Clearing chat history...'):
+        # Add a small delay to show the spinner
+        time.sleep(2)
+        if 'messages' in st.session_state:
+            st.session_state.messages = []
+
 
 def main():
     st.set_page_config(
@@ -231,14 +221,20 @@ def main():
         </style>
     """, unsafe_allow_html=True)
 
-    st.image("assets/img.png", use_container_width=True)
+    st.image("assets/header.png", use_container_width=True)
 
 
-    # st.markdown('<div class="chat-header"><h2>SS AI Assistant</h2></div>', unsafe_allow_html=True)
-    # st.image("assets/img.png", width=600, height=100)
-    # st.image("assets/img.png", use_column_width=True)
-    # Correct way using use_container_width
-    # st.image("assets/img.png", use_container_width=True)
+    # Sidebar
+    with st.sidebar:
+        st.markdown("### Menu")
+        if st.button("Logout", use_container_width=True):
+            logout()
+            st.rerun()
+        if st.button("Clear Chat History", use_container_width=True):
+            clear_chat()
+            st.rerun()
+
+
 
     st.markdown('<h5 class="sub-title" style="text-align: center; color: #001aff;">SS Employee Concierge Just Ask</h5>', unsafe_allow_html=True)
     # Initialize session state
