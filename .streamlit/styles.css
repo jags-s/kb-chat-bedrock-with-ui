@@ -1,6 +1,6 @@
 
 /* Main Layout Components */
-#MainMenu {visibility: hidden;}                /* Hamburger menu */
+MainMenu {visibility: hidden;}                /* Hamburger menu */
 header {visibility: hidden;}                   /* Header with deployment button */
 
 .stApp {

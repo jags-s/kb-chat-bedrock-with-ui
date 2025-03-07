@@ -180,72 +180,94 @@ def display_reference_details(ref):
     
     st.markdown('</div>', unsafe_allow_html=True)
 
+
+
 def create_sidebar():
     """Create and manage the sidebar with chat history"""
     with st.sidebar:
-        st.markdown("### Chat History")
+        # Create a container for the main content
+        main_container = st.container()
         
-        if st.button("+ New Chat", use_container_width=True):
-            create_new_session()
-            st.rerun()
+        # Main content in the sidebar
+        with main_container:
+            # New Chat button at the top
+        # New Chat button at the top with icon
+            if st.button("➕ New Chat", 
+                        type="primary", 
+                        use_container_width=True,
+                        help="Start a new chat"):
+                create_new_session()
+                st.rerun()
 
-        st.markdown("---")
-        
-        sections = {
-            "Today": 1,
-            "Yesterday": 2,
-            "Previous 7 days": 7,
-            "Previous 30 days": 30
-        }
-
-        conversations = chat_manager.get_conversations(st.session_state.user_id)
-        shown_conversations = set()
-
-        for section, days in sections.items():
-            st.markdown(f"#### {section}")
+            st.divider()
             
-            end_date = datetime.now()
-            if section == "Yesterday":
-                end_date = end_date - timedelta(days=1)
-                start_date = end_date
-            else:
-                start_date = end_date - timedelta(days=days)
+            # Get conversations
+            conversations = chat_manager.get_conversations(st.session_state.user_id)
+            if not conversations:
+                st.info("No chat history available")
+                return
+
+            shown_conversations = set()
             
-            section_conversations = {}
-            for date, convs in conversations.items():
-                conv_date = datetime.strptime(date, '%Y-%m-%d')
-                if start_date.date() <= conv_date.date() <= end_date.date():
-                    filtered_convs = {
-                        conv_id: msgs for conv_id, msgs in convs.items()
-                        if conv_id not in shown_conversations
-                    }
-                    if filtered_convs:
-                        section_conversations[date] = filtered_convs
+            sections = {
+                "Today": 1,
+                "Yesterday": 2,
+                "Previous 7 days": 7,
+                "Previous 30 days": 30
+            }
 
-            if section_conversations:
-                for date, convs in sorted(section_conversations.items(), reverse=True):
-                    for conv_id, messages in convs.items():
-                        if conv_id not in shown_conversations:
-                            first_msg = messages[0]['content'][:30] + "..."
-                            time_str = datetime.fromtimestamp(messages[0]['timestamp']).strftime('%I:%M %p')
-                            display_text = f"{first_msg}\n{time_str}"
-                            
-                            col1, col2 = st.columns([0.8, 0.2])
-                            with col1:
-                                if st.button(display_text, key=f"{section}_{conv_id}", use_container_width=True):
-                                    load_conversation(messages)
-                            with col2:
-                                if st.button("🗑️", key=f"del_{section}_{conv_id}"):
-                                    delete_conversation(conv_id)
-                            
-                            shown_conversations.add(conv_id)
-            else:
-                st.markdown("No chats")
+            for section, days in sections.items():
+                # Calculate date range for each section
+                end_date = datetime.now()
+                if section == "Yesterday":
+                    end_date = end_date - timedelta(days=1)
+                    start_date = end_date
+                else:
+                    start_date = end_date - timedelta(days=days)
+                
+                # Filter conversations for this section
+                section_conversations = {}
+                for date, convs in conversations.items():
+                    conv_date = datetime.strptime(date, '%Y-%m-%d')
+                    if start_date.date() <= conv_date.date() <= end_date.date():
+                        filtered_convs = {
+                            conv_id: msgs for conv_id, msgs in convs.items()
+                            if conv_id not in shown_conversations
+                        }
+                        if filtered_convs:
+                            section_conversations[date] = filtered_convs
 
-        st.markdown("<br>" * 5, unsafe_allow_html=True)
-        if st.button("Logout", use_container_width=True, key="logout_sidebar"):
-            logout()
-            st.rerun()
+                # Only show section if it has conversations
+                if section_conversations:
+                    with st.expander(f"📅 {section}", expanded=False):
+                        for date, convs in sorted(section_conversations.items(), reverse=True):
+                            for conv_id, messages in convs.items():
+                                if conv_id not in shown_conversations:
+                                    first_msg = messages[0]['content'][:100] + "..."
+                                    time_str = datetime.fromtimestamp(messages[0]['timestamp']).strftime('%I:%M %p')
+                                    
+                                    # Create a container for each chat entry
+                                    chat_container = st.container()
+                                    with chat_container:
+                                        col1, col2 = st.columns([0.85, 0.15])
+                                        with col1:
+                                            if st.button(
+                                                f"{first_msg}", 
+                                                key=f"{section}_{conv_id}",
+                                                use_container_width=True
+                                            ):
+                                                load_conversation(messages)
+                                        with col2:
+                                            if st.button(
+                                                "🗑️", 
+                                                key=f"del_{section}_{conv_id}",
+                                                help="Delete conversation"
+                                            ):
+                                                delete_conversation(conv_id)
+                                                st.rerun()
+                                    
+                                    shown_conversations.add(conv_id)
+
 
 def load_conversation(messages):
     """Load a conversation into the chat interface"""
@@ -321,6 +343,7 @@ def handle_chat_input(user_input: str):
                 st.rerun()
 
 def main():
+    
     st.set_page_config(
         page_title="SS AI Assistant",
         page_icon="🤖",
@@ -335,12 +358,24 @@ def main():
         if not authenticate():
             return
 
-    st.image("assets/header.png", use_container_width=True)
+    # Create header with logo and logout button
+    col1, col2 = st.columns([0.9, 0.1])
+    with col1:
+        st.image("assets/header.png", use_container_width=True)
+    with col2:
+        # Add logout button in the top right
+        if st.button("X", 
+                    help="Logout",
+                    use_container_width=True):
+            logout()
+            st.rerun()
+
     create_sidebar()
     display_chat_messages()
 
     if prompt := st.chat_input("Ask your question...", key="chat_input"):
         handle_chat_input(prompt)
+
 
 if __name__ == "__main__":
     main()
