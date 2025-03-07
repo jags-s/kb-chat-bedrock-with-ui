@@ -8,6 +8,7 @@ from boto3.dynamodb.conditions import Key
 from dotenv import load_dotenv
 import os
 import logging
+import streamlit as st
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -188,3 +189,11 @@ class ChatHistoryManager:
         except Exception as e:
             logger.error(f"Error deleting conversation: {str(e)}")
             return False
+
+    def clear_history(self):
+        st.session_state.messages = []
+        st.session_state.session_id = str(uuid.uuid4())
+        if hasattr(st.session_state, 'feedback_states'):
+            st.session_state.feedback_states = {}
+        if hasattr(st.session_state, 'show_feedback_categories'):
+            st.session_state.show_feedback_categories = {}
