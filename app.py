@@ -60,6 +60,9 @@ class ChatApplication:
         self.ui_components.display_chat_messages(st.session_state.messages)
 
         if prompt := st.chat_input("Ask your question...", key="chat_input"):
+            st.markdown(f"""<div class="user-message">
+                        {prompt}
+                    </div>""",  unsafe_allow_html=True)
             self.chat_handler.handle_chat_input(prompt)
 
 if __name__ == "__main__":
