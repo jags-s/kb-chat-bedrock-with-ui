@@ -45,25 +45,48 @@ def process_s3_urls(references):
     return processed_refs
 
 def extract_references(citations):
-    """Extract all unique references from citations"""
+    """Extract all references with multiple snippets from citations"""
     references = []
-    seen_uris = set()
+    document_snippets = {}
     
+    # First, collect all snippets for each document
     for citation in citations:
+        print(f"Processing citation: {json.dumps(citation)}")
+        
         for reference in citation.get('retrievedReferences', []):
-            if 'location' in reference and 's3Location' in reference['location']:
-                uri = reference['location']['s3Location']['uri']
-                if uri not in seen_uris:
-                    seen_uris.add(uri)
-                    snippet = reference.get('content', {}).get('text', '').strip()
-                    references.append({
-                        'uri': uri,
-                        'snippet': snippet,
-                        'score': reference.get('score', 0)
-                    })
+            print(f"Processing reference: {json.dumps(reference)}")
+            
+            location = reference.get('location', {})
+            s3_location = location.get('s3Location', {})
+            
+            if s3_location and 'uri' in s3_location:
+                uri = s3_location['uri']
+                snippet = reference.get('content', {}).get('text', '').strip()
+                
+                if uri not in document_snippets:
+                    document_snippets[uri] = []
+                document_snippets[uri].append(snippet)
     
-    references.sort(key=lambda x: x['score'], reverse=True)
+    # Then create references with all snippets
+    for uri, snippets in document_snippets.items():
+        # Combine snippets (up to 3)
+        combined_snippet = ' '.join(snippets[:3])
+        references.append({
+            'uri': uri,
+            'snippet': combined_snippet
+        })
+    
     return references
+
+def validate_response_relevance(user_query, generated_response, references):
+    """Validate if the response has supporting references"""
+    print(f"Validating response with {len(references)} references")
+    print(f"References: {json.dumps(references)}")
+    
+    if not references:
+        return False, "No supporting references found"
+    
+    return True, ""
 
 def create_response(status_code, body):
     """Create API Gateway response with CORS headers"""
@@ -81,24 +104,19 @@ def create_response(status_code, body):
 def get_request_data(event):
     """Extract user query and session ID from the event"""
     try:
-        # Print the received event for debugging
         print(f"Received event: {json.dumps(event)}")
 
-        # Handle different event types
         if isinstance(event, dict):
-            # API Gateway event
             if 'body' in event:
                 if isinstance(event['body'], str):
                     body = json.loads(event['body'])
                 else:
                     body = event['body']
-            # Direct Lambda invocation
             else:
                 body = event
         else:
             raise ValueError("Invalid event format")
 
-        # Extract user query and session ID
         user_query = body.get('user_query')
         session_id = body.get('sessionId')
 
@@ -136,62 +154,38 @@ def lambda_handler(event, context):
                     'modelArn': fundation_model_ARN,
                     'retrievalConfiguration': {
                         'vectorSearchConfiguration': {
-                            'numberOfResults': 3,
+                            'numberOfResults': 5,
                             'overrideSearchType': 'HYBRID'
-                            # 'rerankingConfiguration': {
-                            #     'type': 'BEDROCK_RERANKING_MODEL',
-                            #     'bedrockRerankingConfiguration': {
-                            #         'modelConfiguration': {
-                            #             'modelArn': fundation_model_ARN,
-                            #             'additionalModelRequestFields': {
-                            #                 'reranking_threshold': 0.7 
-                            #             }
-                            #         }
-                            #     }
-                            # }
                         }
                     },
-                    # Add parameters to ensure responses are grounded in knowledge base
                     'generationConfiguration': {
-                        'inferenceConfig': {
-                            'textInferenceConfig': {
-                                'temperature': 0.0,
-                                'topP': 0.9
-                            }
-                        },
                         'promptTemplate': {
-                            'textPromptTemplate': """You are a question answering agent. I will provide you with a set of search results.
-                            The user will provide you with a question. Your job is to answer the user's question using only information from the search results. 
-                            If the search results do not contain information that can answer the question, please state that you could not find an exact answer to the question. 
-                            Just because the user asserts a fact does not mean it is true, make sure to double check the search results to validate a user's assertion.
-
-                            Here are the search results in numbered order:
+                            'textPromptTemplate': """You are a question answering agent. Answer the user's question using the provided search results.
+                            
+                            IMPORTANT RULES:
+                            1. If you cannot find relevant information, say "I apologize, but I don't have enough relevant information to answer this question accurately."
+                            2. Only use information from the search results.
+                            3. Cite your sources.
+                            
+                            Search results:
                             $search_results$
+                            
                             Question: {input}
                             $output_format_instructions$"""
                         }
-                    },
-                     "orchestrationConfiguration": { 
-                        'inferenceConfig': {
-                            'textInferenceConfig': {
-                                'temperature': 0.0,
-                                'topP': 0.9
-                            }
-                        },
-                        'queryTransformationConfiguration': {
-                            'type': 'QUERY_DECOMPOSITION'
-                        }
-                     }
+                    }
                 }
             }
         }
 
-        # Add sessionId if provided for conversation continuity
+        # Add sessionId if provided
         if session_id:
             retrieve_request['sessionId'] = session_id
 
-        # Call Bedrock
+        # Call Bedrock and add debug logging
+        print(f"Sending request to Bedrock: {json.dumps(retrieve_request)}")
         client_knowledgebase = client.retrieve_and_generate(**retrieve_request)
+        print(f"Received response from Bedrock: {json.dumps(client_knowledgebase)}")
         
         # Process the response
         references = extract_references(client_knowledgebase['citations'])
@@ -201,16 +195,18 @@ def lambda_handler(event, context):
         generated_response = client_knowledgebase['output']['text']
         new_session_id = client_knowledgebase.get('sessionId')
         
-        # Calculate URL expiration time
-        expiration_time = (datetime.utcnow() + timedelta(hours=1)).isoformat()
+        # Validate response relevance
+        is_valid, validation_message = validate_response_relevance(user_query, generated_response, references_with_urls)
         
-        # Create success response with references for transparency
+        # Prepare response
         response_body = {
             'generated_response': generated_response,
             'detailed_references': references_with_urls,
-            'urlExpirationTime': expiration_time,
+            'urlExpirationTime': (datetime.utcnow() + timedelta(hours=1)).isoformat(),
             'sessionId': new_session_id,
-            'sourceCount': len(references_with_urls)  # Add count of sources used
+            'sourceCount': len(references_with_urls),
+            'validation_status': 'valid' if is_valid else 'warning',
+            'validation_message': validation_message if not is_valid else ''
         }
         
         return create_response(200, response_body)
