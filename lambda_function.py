@@ -9,6 +9,12 @@ service_name = 'bedrock-agent-runtime'
 client = boto3.client(service_name)
 s3_client = boto3.client('s3')
 
+# Create Bedrock client for us-west-2 region to access rerank models
+bedrock_runtime_west = boto3.client(
+    service_name='bedrock-runtime',
+    region_name='us-west-2'
+)
+
 knowledgeBaseID = os.environ['KNOWLEDGE_BASE_ID']
 fundation_model_ARN = os.environ['FM_ARN']
 
@@ -43,6 +49,51 @@ def process_s3_urls(references):
                 ref['presigned_url'] = presigned_url
                 processed_refs.append(ref)
     return processed_refs
+
+def rerank_references(references, user_query):
+    """Rerank references based on relevance using Cohere Rerank 3.5"""
+    try:
+        # Prepare documents for reranking
+        documents = [ref['snippet'] for ref in references]
+        
+        # Prepare request body for Cohere Rerank
+        request_body = {
+            "documents": documents,
+            "query": user_query,
+            "topN": len(documents),
+            "returnMetadata": True
+        }
+
+        # Call Cohere Rerank model
+        response = bedrock_runtime_west.invoke_model(
+            modelId="cohere.rerank-3.5",  # or "amazon.rerank-1.0"
+            contentType="application/json",
+            accept="application/json",
+            body=json.dumps(request_body)
+        )
+        
+        # Parse response
+        response_body = json.loads(response['body'].read())
+        results = response_body.get('results', [])
+        
+        # Add ranking scores to references
+        ranked_references = []
+        for idx, result in enumerate(results):
+            original_ref = references[result['index']]
+            ranked_ref = {
+                **original_ref,
+                'relevance_score': result['relevance_score'],
+                'rank': idx + 1
+            }
+            ranked_references.append(ranked_ref)
+        
+        # Sort by relevance score in descending order
+        ranked_references.sort(key=lambda x: x['relevance_score'], reverse=True)
+        return ranked_references
+
+    except Exception as e:
+        print(f"Error in reranking: {str(e)}")
+        return references  # Return original references if reranking fails
 
 def extract_references(citations):
     """Extract all references with multiple snippets from citations"""
@@ -187,18 +238,27 @@ def lambda_handler(event, context):
         client_knowledgebase = client.retrieve_and_generate(**retrieve_request)
         print(f"Received response from Bedrock: {json.dumps(client_knowledgebase)}")
         
-        # Process the response
+        # Extract initial references
         references = extract_references(client_knowledgebase['citations'])
-        references_with_urls = process_s3_urls(references)
+        
+        # Rerank references based on relevance
+        ranked_references = rerank_references(references, user_query)
+        
+        # Process S3 URLs for ranked references
+        references_with_urls = process_s3_urls(ranked_references)
         
         # Get response text and session ID
         generated_response = client_knowledgebase['output']['text']
         new_session_id = client_knowledgebase.get('sessionId')
         
         # Validate response relevance
-        is_valid, validation_message = validate_response_relevance(user_query, generated_response, references_with_urls)
+        is_valid, validation_message = validate_response_relevance(
+            user_query, 
+            generated_response, 
+            references_with_urls
+        )
         
-        # Prepare response
+        # Prepare response with ranked references
         response_body = {
             'generated_response': generated_response,
             'detailed_references': references_with_urls,
