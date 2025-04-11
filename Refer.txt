@@ -221,3 +221,20 @@ def lambda_handler(event, context):
             'detailed_references': [],
             'sessionId': session_id if 'session_id' in locals() else None
         })
+
+
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "bedrock:InvokeModel"
+            ],
+            "Resource": [
+                "arn:aws:bedrock:us-west-2::foundation-model/cohere.rerank-3.5",
+                "arn:aws:bedrock:us-west-2::foundation-model/amazon.rerank-1.0"
+            ]
+        }
+    ]
+}
