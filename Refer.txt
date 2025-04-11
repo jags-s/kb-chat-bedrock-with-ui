@@ -232,8 +232,8 @@ def lambda_handler(event, context):
                 "bedrock:InvokeModel"
             ],
             "Resource": [
-                "arn:aws:bedrock:us-west-2::foundation-model/cohere.rerank-3.5",
-                "arn:aws:bedrock:us-west-2::foundation-model/amazon.rerank-1.0"
+                "arn:aws:bedrock:us-west-2::foundation-model/cohere.rerank-v3-5:0",
+                "arn:aws:bedrock:us-west-2::foundation-model/amazon.rerank-v1:0"
             ]
         }
     ]

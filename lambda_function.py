@@ -1,8 +1,13 @@
 import os
 import json
 import boto3
+import logging
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
+
+# Configure logging
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 # Initialize AWS clients
 service_name = 'bedrock-agent-runtime'
@@ -17,10 +22,12 @@ bedrock_runtime_west = boto3.client(
 
 knowledgeBaseID = os.environ['KNOWLEDGE_BASE_ID']
 fundation_model_ARN = os.environ['FM_ARN']
+RELEVANCE_THRESHOLD = 0.3  # Configurable threshold for relevance
 
 def generate_presigned_url(bucket, key, expiration=1800):
     """Generate a presigned URL for an S3 object"""
     try:
+        logger.info(f"Generating presigned URL for bucket: {bucket}, key: {key}")
         url = s3_client.generate_presigned_url(
             'get_object',
             Params={
@@ -32,11 +39,12 @@ def generate_presigned_url(bucket, key, expiration=1800):
         )
         return url
     except Exception as e:
-        print(f"Error generating presigned URL: {str(e)}")
+        logger.error(f"Error generating presigned URL: {str(e)}")
         return None
 
 def process_s3_urls(references):
     """Convert S3 URIs to presigned URLs in references"""
+    logger.info(f"Processing S3 URLs for {len(references)} references")
     processed_refs = []
     for ref in references:
         if 'uri' in ref:
@@ -48,64 +56,85 @@ def process_s3_urls(references):
             if presigned_url:
                 ref['presigned_url'] = presigned_url
                 processed_refs.append(ref)
+    logger.info(f"Processed {len(processed_refs)} references with presigned URLs")
     return processed_refs
 
-def rerank_references(references, user_query):
-    """Rerank references based on relevance using Cohere Rerank 3.5"""
+def rerank_references(references, user_query, generated_response):
+    """Enhanced reranking with response correlation using Cohere Rerank v3.5"""
     try:
-        # Prepare documents for reranking
+        logger.info(f"Starting reranking process for {len(references)} references")
         documents = [ref['snippet'] for ref in references]
         
-        # Prepare request body for Cohere Rerank
+        # Prepare request body with exact format required
         request_body = {
-            "documents": documents,
             "query": user_query,
-            "topN": len(documents),
-            "returnMetadata": True
+            "documents": documents,
+            "top_n": len(documents),
+            "api_version": 2
         }
 
-        # Call Cohere Rerank model
+        logger.info(f"Rerank request body: {json.dumps(request_body)}")
+        
+        # Call Cohere Rerank v3.5 model with exact format
         response = bedrock_runtime_west.invoke_model(
-            modelId="cohere.rerank-3.5",  # or "amazon.rerank-1.0"
+            modelId="cohere.rerank-v3-5:0",
             contentType="application/json",
-            accept="application/json",
+            accept="*/*",
             body=json.dumps(request_body)
         )
         
-        # Parse response
         response_body = json.loads(response['body'].read())
-        results = response_body.get('results', [])
+        logger.info(f"Rerank response: {json.dumps(response_body)}")
         
-        # Add ranking scores to references
+        # Process results
+        results = response_body.get('results', [])
+        logger.info(f"Received {len(results)} ranked results")
+        
         ranked_references = []
         for idx, result in enumerate(results):
-            original_ref = references[result['index']]
-            ranked_ref = {
-                **original_ref,
-                'relevance_score': result['relevance_score'],
-                'rank': idx + 1
-            }
-            ranked_references.append(ranked_ref)
+            original_ref = references[result.get('index', 0)]
+            relevance_score = result.get('relevance_score', 0)
+            
+            # Check if reference content is used in response
+            is_used = original_ref['snippet'] in generated_response
+            
+            if relevance_score >= RELEVANCE_THRESHOLD:
+                ranked_ref = {
+                    **original_ref,
+                    'relevance_score': relevance_score,
+                    'rank': idx + 1,
+                    'used_in_response': is_used
+                }
+                ranked_references.append(ranked_ref)
+                logger.info(f"Reference {idx + 1} - Score: {relevance_score:.3f}, Used: {is_used}")
         
-        # Sort by relevance score in descending order
-        ranked_references.sort(key=lambda x: x['relevance_score'], reverse=True)
+        # Sort by both usage in response and relevance score
+        ranked_references.sort(
+            key=lambda x: (x['used_in_response'], x['relevance_score']), 
+            reverse=True
+        )
+        
+        logger.info(f"Reranking complete. {len(ranked_references)} references above threshold")
         return ranked_references
 
     except Exception as e:
-        print(f"Error in reranking: {str(e)}")
-        return references  # Return original references if reranking fails
+        logger.error(f"Error in reranking: {str(e)}")
+        logger.error(f"Full error details: {str(e.__dict__)}")
+        logger.error(f"Request body that caused error: {json.dumps(request_body)}")
+        return references
 
-def extract_references(citations):
-    """Extract all references with multiple snippets from citations"""
+def extract_references(citations, generated_response):
+    """Extract references and track which ones were used in the response"""
+    logger.info("Starting reference extraction from citations")
     references = []
     document_snippets = {}
+    used_citations = set()
     
-    # First, collect all snippets for each document
     for citation in citations:
-        print(f"Processing citation: {json.dumps(citation)}")
+        logger.debug(f"Processing citation: {json.dumps(citation)}")
         
         for reference in citation.get('retrievedReferences', []):
-            print(f"Processing reference: {json.dumps(reference)}")
+            logger.debug(f"Processing reference: {json.dumps(reference)}")
             
             location = reference.get('location', {})
             s3_location = location.get('s3Location', {})
@@ -114,29 +143,57 @@ def extract_references(citations):
                 uri = s3_location['uri']
                 snippet = reference.get('content', {}).get('text', '').strip()
                 
+                # More flexible content matching
+                if snippet:
+                    # Check if any part of the snippet is in the response
+                    sentences = snippet.split('.')
+                    for sentence in sentences:
+                        if sentence.strip() and sentence.strip() in generated_response:
+                            used_citations.add(uri)
+                            logger.info(f"Found citation used in response: {uri[:50]}...")
+                            break
+                
                 if uri not in document_snippets:
                     document_snippets[uri] = []
                 document_snippets[uri].append(snippet)
     
-    # Then create references with all snippets
+    # Create references with all snippets
     for uri, snippets in document_snippets.items():
-        # Combine snippets (up to 3)
         combined_snippet = ' '.join(snippets[:3])
         references.append({
             'uri': uri,
-            'snippet': combined_snippet
+            'snippet': combined_snippet,
+            'used_in_response': uri in used_citations
         })
     
+    logger.info(f"Extracted {len(references)} references, {len(used_citations)} used in response")
     return references
 
 def validate_response_relevance(user_query, generated_response, references):
-    """Validate if the response has supporting references"""
-    print(f"Validating response with {len(references)} references")
-    print(f"References: {json.dumps(references)}")
+    """Enhanced validation of response relevance"""
+    logger.info("Starting response relevance validation")
     
     if not references:
+        logger.warning("No supporting references found")
         return False, "No supporting references found"
     
+    # Check relevance scores
+    low_relevance_refs = [
+        ref for ref in references 
+        if ref.get('relevance_score', 0) < RELEVANCE_THRESHOLD
+    ]
+    
+    if low_relevance_refs:
+        logger.warning(f"Found {len(low_relevance_refs)} references with low relevance scores")
+        return False, "Some references have low relevance scores"
+    
+    # Check if response uses reference content
+    used_refs = [ref for ref in references if ref.get('used_in_response', False)]
+    if not used_refs:
+        logger.warning("No references found to be used in the response")
+        return False, "Response may not be fully supported by references"
+    
+    logger.info("Response validation successful")
     return True, ""
 
 def create_response(status_code, body):
@@ -155,7 +212,7 @@ def create_response(status_code, body):
 def get_request_data(event):
     """Extract user query and session ID from the event"""
     try:
-        print(f"Received event: {json.dumps(event)}")
+        logger.info(f"Processing event: {json.dumps(event)}")
 
         if isinstance(event, dict):
             if 'body' in event:
@@ -171,10 +228,11 @@ def get_request_data(event):
         user_query = body.get('user_query')
         session_id = body.get('sessionId')
 
+        logger.info(f"Extracted query: {user_query}, sessionId: {session_id}")
         return user_query, session_id
 
     except Exception as e:
-        print(f"Error in get_request_data: {str(e)}")
+        logger.error(f"Error in get_request_data: {str(e)}")
         raise
 
 def lambda_handler(event, context):
@@ -183,12 +241,14 @@ def lambda_handler(event, context):
         try:
             user_query, session_id = get_request_data(event)
         except Exception as e:
+            logger.error(f"Error processing request: {str(e)}")
             return create_response(400, {
                 'error': f'Error processing request: {str(e)}'
             })
 
         # Validate user query
         if not user_query:
+            logger.error("Missing user query")
             return create_response(400, {
                 'error': 'user_query is required'
             })
@@ -229,50 +289,82 @@ def lambda_handler(event, context):
             }
         }
 
-        # Add sessionId if provided
         if session_id:
             retrieve_request['sessionId'] = session_id
 
-        # Call Bedrock and add debug logging
-        print(f"Sending request to Bedrock: {json.dumps(retrieve_request)}")
+        # Call Bedrock
+        logger.info(f"Sending request to Bedrock: {json.dumps(retrieve_request)}")
         client_knowledgebase = client.retrieve_and_generate(**retrieve_request)
-        print(f"Received response from Bedrock: {json.dumps(client_knowledgebase)}")
+        logger.info("Received response from Bedrock")
         
-        # Extract initial references
-        references = extract_references(client_knowledgebase['citations'])
-        
-        # Rerank references based on relevance
-        ranked_references = rerank_references(references, user_query)
-        
-        # Process S3 URLs for ranked references
-        references_with_urls = process_s3_urls(ranked_references)
-        
-        # Get response text and session ID
+        # Get response text first
         generated_response = client_knowledgebase['output']['text']
-        new_session_id = client_knowledgebase.get('sessionId')
+        logger.info(f"Generated response: {generated_response[:200]}...")
         
-        # Validate response relevance
+        # Extract and process references
+        references = extract_references(
+            client_knowledgebase['citations'], 
+            generated_response
+        )
+        
+        # Rerank references
+        ranked_references = rerank_references(
+            references, 
+            user_query, 
+            generated_response
+        )
+        
+        # Filter relevant references
+        relevant_references = [
+            ref for ref in ranked_references 
+            if ref.get('relevance_score', 0) >= RELEVANCE_THRESHOLD
+        ]
+        
+        # Process S3 URLs
+        references_with_urls = process_s3_urls(relevant_references)
+        
+        # Validate response
         is_valid, validation_message = validate_response_relevance(
             user_query, 
             generated_response, 
             references_with_urls
         )
         
-        # Prepare response with ranked references
+        # Prepare debug information
+        debug_info = {
+            'query': user_query,
+            'total_references': len(references),
+            'relevant_references': len(relevant_references),
+            'relevance_scores': [
+                {
+                    'score': ref.get('relevance_score', 0),
+                    'used': ref.get('used_in_response', False)
+                }
+                for ref in references_with_urls
+            ],
+            'used_references': len([
+                ref for ref in references_with_urls 
+                if ref.get('used_in_response', False)
+            ])
+        }
+        
+        # Prepare response
         response_body = {
             'generated_response': generated_response,
             'detailed_references': references_with_urls,
             'urlExpirationTime': (datetime.utcnow() + timedelta(hours=1)).isoformat(),
-            'sessionId': new_session_id,
+            'sessionId': client_knowledgebase.get('sessionId'),
             'sourceCount': len(references_with_urls),
             'validation_status': 'valid' if is_valid else 'warning',
-            'validation_message': validation_message if not is_valid else ''
+            'validation_message': validation_message if not is_valid else '',
+            'debug_info': debug_info
         }
         
+        logger.info(f"Returning response with {len(references_with_urls)} references")
         return create_response(200, response_body)
 
     except Exception as e:
-        print(f"Error in lambda_handler: {str(e)}")
+        logger.error(f"Error in lambda_handler: {str(e)}")
         return create_response(500, {
             'error': str(e),
             'generated_response': 'An error occurred while processing your request.',
