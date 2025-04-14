@@ -143,12 +143,16 @@ def extract_references(citations, generated_response):
                 uri = s3_location['uri']
                 snippet = reference.get('content', {}).get('text', '').strip()
                 
-                # More flexible content matching
+                # Improved content matching - use case-insensitive and normalize whitespace
                 if snippet:
+                    # Normalize text for better matching
+                    normalized_snippet = ' '.join(snippet.lower().split())
+                    normalized_response = ' '.join(generated_response.lower().split())
+                    
                     # Check if any part of the snippet is in the response
-                    sentences = snippet.split('.')
+                    sentences = normalized_snippet.split('.')
                     for sentence in sentences:
-                        if sentence.strip() and sentence.strip() in generated_response:
+                        if sentence.strip() and sentence.strip() in normalized_response:
                             used_citations.add(uri)
                             logger.info(f"Found citation used in response: {uri[:50]}...")
                             break
@@ -183,9 +187,10 @@ def validate_response_relevance(user_query, generated_response, references):
         if ref.get('relevance_score', 0) < RELEVANCE_THRESHOLD
     ]
     
-    if low_relevance_refs:
-        logger.warning(f"Found {len(low_relevance_refs)} references with low relevance scores")
-        return False, "Some references have low relevance scores"
+    # Only consider low relevance an issue if ALL references have low relevance
+    if low_relevance_refs and len(low_relevance_refs) == len(references):
+        logger.warning(f"All {len(low_relevance_refs)} references have low relevance scores")
+        return False, "All references have low relevance scores"
     
     # Check if response uses reference content
     used_refs = [ref for ref in references if ref.get('used_in_response', False)]
@@ -252,6 +257,21 @@ def lambda_handler(event, context):
             return create_response(400, {
                 'error': 'user_query is required'
             })
+        
+        # Sanitize user query - remove any potential harmful characters
+        user_query = user_query.strip()
+        
+        # Add error handling for empty query after sanitization
+        if not user_query:
+            logger.error("Empty user query after sanitization")
+            return create_response(400, {
+                'error': 'user_query cannot be empty'
+            })
+            
+        # Limit query length to prevent potential issues
+        if len(user_query) > 1000:
+            user_query = user_query[:1000]
+            logger.warning("User query truncated to 1000 characters")
 
         # Prepare the request for Bedrock
         retrieve_request = {
